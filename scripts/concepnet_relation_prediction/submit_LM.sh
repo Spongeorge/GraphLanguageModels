@@ -9,13 +9,14 @@ train_batch_size=32
 gradient_accumulation_steps=1
 eos_usage=False # bidirectional
 init_additional_buckets_from=1e6
+save_model_filepath=/home/students/kolber/Investigating-GLM-hidden-states/checkpoints
+#load_model_filepath=/checkpoints/best_epoch
 
 device=cuda
 logging_level=INFO
 
-for seed in 0 # 0 1 2 3 4
-do
-    for params_to_train in all # all head
+
+for params_to_train in all # all head
     do
         for radius in 1 # 1 2 3 4 5
         do
@@ -34,9 +35,8 @@ do
                     learning_rate=0.005
                 fi
                 echo ""
-                echo running $params_to_train $radius $num_masked $seed $graph_representation
+                echo running $params_to_train $radius $num_masked $seed $graph_representation $load_model_filepath
                 python experiments/encoder/relation_prediction/train_LM.py \
-                    --seed $seed \
                     --num_masked $num_masked \
                     --radius $radius \
                     --params_to_train $params_to_train \
@@ -52,7 +52,9 @@ do
                     --eos_usage $eos_usage \
                     --init_additional_buckets_from $init_additional_buckets_from \
                     --device $device \
-                    --logging_level $logging_level
+                    --logging_level $logging_level \
+                    --save_model_filepath $save_model_filepath #\
+#                    --load_model_filepath $load_model_filepath 
                 echo done $params_to_train $radius $num_masked $seed $graph_representation
                 echo ""
             done

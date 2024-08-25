@@ -171,6 +171,19 @@ def add_args(parser: ArgumentParser):
         default=1e6,
         help="Specifies from which bucket of the parent model the additional buckets are initialized. init_additional_buckets_from gives the relative position, and the bucket is the one which corresponds to that relative position. If None, then the additional buckets are initialized randomly as determined by from_pretrained().",
     )
+    parser.add_argument(
+        "--save_model_filepath",
+        type=str,
+        default=None,
+        help="Specify the path where the model checkpoint gets saved. If None, then the model checkpoint doesn't get saved.",
+    )
+    
+    parser.add_argument(
+        "--load_model_filepath",
+        type=str,
+        default=None,
+        help="Specify the path from which a saved model checkpoint gets loaded.",
+    )
 
 def get_args(parser: ArgumentParser):
     args = parser.parse_args()
@@ -456,7 +469,11 @@ def main(args):
     logging.info('load T5 encoder')
     num_classes = len(label_to_index)
     
-    model = GraphT5Classifier(config=GraphT5Classifier.get_config(num_classes=num_classes, modelsize=args.modelsize, num_additional_buckets=args.num_additional_buckets))
+    if args.load_model_filepath:
+        model = GraphT5Classifier.from_pretrained(args.load_model_filepath)
+    else:
+        model = GraphT5Classifier(config=GraphT5Classifier.get_config(num_classes=num_classes, modelsize=args.modelsize, num_additional_buckets=args.num_additional_buckets))
+        
     if args.num_additional_buckets != 0:
         logging.info(f'init relative position bias with {args.num_additional_buckets} additional buckets')
         model.t5model.init_relative_position_bias(modelsize=args.modelsize, init_decoder=False, init_additional_buckets_from=args.init_additional_buckets_from)
@@ -501,6 +518,8 @@ def main(args):
         # get test scores
         test_loss, test_accuracy = run_eval_epoch(model=model, data=data['test'], criterion=criterion, batch_size=args.eval_batch_size, device=args.device)
         logging.info(f'test  - {epoch = } # {test_loss = :.2f} # {test_accuracy = :.2f}')
+        
+        
 
         if dev_loss < best_dev_loss:
             best_epoch = epoch
@@ -508,6 +527,7 @@ def main(args):
             best_dev_loss = dev_loss
             best_test_accuracy = test_accuracy
             best_test_loss = test_loss
+            model.save_pretrained(args.save_model_filepath + f"/best_epoch")
 
         wandb.log(
             {
@@ -537,6 +557,7 @@ def main(args):
                 "test/accuracy": test_accuracy, "test/loss": test_loss, 'test/best_accuracy': best_test_accuracy, 'test/best_loss': best_test_loss,
             }
         )
+    
 
 
 if __name__ == "__main__":
