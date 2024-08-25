@@ -1,3 +1,5 @@
+## Fork by timkolber to implement custom changes to inspect GLMs using Patchscopes.
+
 # Graph Language Models
 This repository contains the code for the paper "[Graph Language Models](https://arxiv.org/abs/2401.07105)". 
 Please feel free to send us an email (<a href="mailto:plenz@cl.uni-heidelberg.de">plenz@cl.uni-heidelberg.de</a>) if you have any questions, comments or feedback. 
