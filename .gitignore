@@ -161,3 +161,4 @@ cython_debug/
 
 data/knowledgegraph/conceptnet/relation_subgraphs_random/
 wandb/
+.cache/

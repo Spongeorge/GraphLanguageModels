@@ -1,3 +1,8 @@
+import os
+
+HF_CACHE_DIR = "/home/students/kolber/seminars/kolber/.cache/"
+os.environ["HF_HOME"] = HF_CACHE_DIR
+
 import torch
 from typing import List
 
@@ -57,7 +62,7 @@ def get_batch(data_instances: List[Data], pad_token_id: int, device: str):
 
 def main():
     # define random parameters
-    modelsize = "t5-small"
+    modelsize = "t5-large"
     init_additional_buckets_from = 1e6
 
     # define test inputs (2 instances to implement batching)
@@ -107,7 +112,7 @@ def main():
                 num_additional_buckets=param["num_additional_buckets"],
             )
         )
-        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-large")
 
         # initialize additional buckets. The additional buckets are the additional relative posistions introduced in gGLM and in text-guided models.
         if param["num_additional_buckets"] > 0:

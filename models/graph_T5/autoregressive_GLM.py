@@ -3,7 +3,9 @@ import torch.nn as nn
 from typing import List, Tuple, Dict, Union, Optional
 import logging
 
+# from transformers import T5ForConditionalGeneration
 from transformers.modeling_utils import PreTrainedModel
+
 from models.graph_T5.graph_t5 import T5ForConditionalGeneration
 from models.graph_T5.graph_t5 import T5Config, T5EncoderModel
 from models.graph_T5.graph_t5 import T5TokenizerFast as T5Tokenizer
@@ -13,21 +15,25 @@ from models.graph_T5.wrapper_functions import graph_to_graphT5, get_dummy_graph
 class GraphT5ForConditionalGeneration(PreTrainedModel):
     config_class = T5Config
 
-    def __init__(
-        self,
-        config: T5Config,
-    ):
+    def __init__(self, config: T5Config, encoder_model_size: str = "t5-large"):
         super().__init__(config=config)
         self.config = config
+        self.encoder_model_size = encoder_model_size
         self.tokenizer = T5Tokenizer.from_pretrained(
             self.config.modelsize, model_max_length=self.config.model_max_length
         )
+        if "flan" in self.config.modelsize:
+            ignore_mismatched_sizes = False
+        else:
+            ignore_mismatched_sizes = True
 
         self.t5model = T5ForConditionalGeneration.from_pretrained(
-            self.config.modelsize, config=config, ignore_mismatched_sizes=True
+            self.config.modelsize,
+            config=config,
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
         )  # when initializing the model with .from_pretrained, the weights are loaded from the pretrained model, so the t5 parameters are not actually used in that case. Loading them here is unnecessary overhead.
         self.t5model.encoder = T5EncoderModel.from_pretrained(
-            self.config.modelsize, config=config, ignore_mismatched_sizes=True
+            self.encoder_model_size, config=config, ignore_mismatched_sizes=True
         )
         self.hidden_size = self.t5model.config.d_model
         self.softmax = nn.Softmax(dim=-1)
