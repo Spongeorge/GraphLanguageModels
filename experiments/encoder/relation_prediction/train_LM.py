@@ -14,9 +14,16 @@ import os, sys
 import logging
 import wandb
 
+import os
+import sys
+
+sys.path.append("/home/students/kolber/Investigating-GLM-hidden-states/GraphLanguageModels")
+
 from models.graph_T5.classifier import GraphT5Classifier
 from models.graph_T5.graph_t5 import T5TokenizerFast as T5Tokenizer
 from models.graph_T5.wrapper_functions import Graph, graph_to_graphT5, graph_to_set_of_triplets, get_embedding, Data
+
+from transformers import AutoModel
 
 def add_args_shared(parser: ArgumentParser):
     parser.add_argument(
@@ -120,6 +127,12 @@ def add_args_shared(parser: ArgumentParser):
         type=str,
         default="",
         help="prefix to run name in wandb",
+    )
+    parser.add_argument(
+        "--load_hf_model_filepath",
+        type=str,
+        default=None,
+        help="Specify the path from which a huggingface GLM encoder gets loaded.",
     )
 
 def add_args(parser: ArgumentParser):
@@ -474,6 +487,9 @@ def main(args):
     else:
         model = GraphT5Classifier(config=GraphT5Classifier.get_config(num_classes=num_classes, modelsize=args.modelsize, num_additional_buckets=args.num_additional_buckets))
         
+    if args.load_hf_model_filepath:
+        model.t5model = AutoModel.from_pretrained(args.load_hf_model_filepath, trust_remote_code=True, revision="main")
+        
     if args.num_additional_buckets != 0:
         logging.info(f'init relative position bias with {args.num_additional_buckets} additional buckets')
         model.t5model.init_relative_position_bias(modelsize=args.modelsize, init_decoder=False, init_additional_buckets_from=args.init_additional_buckets_from)
@@ -528,6 +544,7 @@ def main(args):
             best_test_accuracy = test_accuracy
             best_test_loss = test_loss
             model.save_pretrained(args.save_model_filepath + f"/best_epoch")
+            model.t5model.save_pretrained(args.save_model_filepath + f"/best_epoch_t5encoder")
 
         wandb.log(
             {

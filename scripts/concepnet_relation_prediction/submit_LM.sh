@@ -11,6 +11,8 @@ eos_usage=False # bidirectional
 init_additional_buckets_from=1e6
 save_model_filepath=/home/students/kolber/Investigating-GLM-hidden-states/checkpoints
 #load_model_filepath=/checkpoints/best_epoch
+load_hf_model_filepath=plenz/GLM-t5-small
+early_stopping=20
 
 device=cuda
 logging_level=INFO
@@ -53,6 +55,9 @@ for params_to_train in all # all head
                     --init_additional_buckets_from $init_additional_buckets_from \
                     --device $device \
                     --logging_level $logging_level \
+                    --load_hf_model_filepath $load_hf_model_filepath \
+                    --num_additional_buckets 3 \
+                    --early_stopping $early_stopping \
                     --save_model_filepath $save_model_filepath #\
 #                    --load_model_filepath $load_model_filepath 
                 echo done $params_to_train $radius $num_masked $seed $graph_representation
