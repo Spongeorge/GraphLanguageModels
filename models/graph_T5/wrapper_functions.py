@@ -14,9 +14,10 @@ class Graph:
     :param g: A list of tuples, where each tuple is a triple (head, r, tail).
     """
 
-    def __init__(self, g: List[Tuple[str, str, str]] = []):
+    def __init__(self, g: List[Tuple[int, str, int]] = [], node_labels: dict = {}):
         self.g = g
-        self.concepts = self.get_concepts()  # list of all concepts in the graph
+        self.node_labels = node_labels
+        #self.concepts = self.get_concepts()  # list of all concepts in the graph
         self.relations = self.get_relations()  # list of all relations in the graph
         self.relations_multiple = (
             self.get_relations_multiple()
@@ -40,7 +41,8 @@ class Graph:
         """
         Get the concepts in the graph.
         """
-        concepts = list(set([triplet[i] for triplet in self.g for i in [0, 2]]))
+        #concepts = list(set([triplet[i] for triplet in self.g for i in [0, 2]]))
+        concepts = list(self.node_labels.values())
         concepts.sort()  # not necessary but makes debugging easier
         return concepts
 
@@ -59,17 +61,17 @@ class Graph:
         relations = [triplet[1] for triplet in self.g]
         return relations
 
-    def get_neighbors(self, concept: str, radius: int = 1) -> List[str]:
+    def get_neighbors(self, node_id: int, radius: int = 1) -> List[int]:
         """
         Get the neighbors of a concept.
-        :param concept: The concept for which to get the neighbors.
+        :param node_id: The node_id for which to get the neighbors.
         :param radius: The radius of the neighborhood.
         """
         assert radius >= 1, f"radius={radius} must be >= 1"
         neighbors = []
         for triplet in self.g:
-            if concept in triplet:
-                neighbors.extend([triplet[i] for i in [0, 2] if triplet[i] != concept])
+            if node_id in (triplet[0], triplet[2]):
+                neighbors.extend([triplet[i] for i in [0, 2] if triplet[i] != node_id])
         if radius > 1:
             neighbors = list(set(neighbors))
             for neighbor in neighbors:
@@ -84,67 +86,68 @@ class Graph:
         """
         assert size >= 1, f"size={size} must be >= 1"
 
-        concepts_to_mask = []
+        node_ids_to_mask = []
         relation_mask_counter = 0
 
         for _ in range(size):
-            concepts_to_mask_tmp = set()
+            node_ids_to_mask_tmp = set()
             for triplet in self.g:
-                if triplet[0] == "<mask>" and not triplet[1].startswith("<r_mask_"):
-                    triplet[1] = f"<r_mask_{relation_mask_counter}>"
+                if self.node_labels[triplet[0]] == "<mask>" and not triplet[1].startswith("<r_mask_"):
+                    self.node_labels[triplet[1]] = f"<r_mask_{relation_mask_counter}>"
                     relation_mask_counter += 1
-                    concepts_to_mask_tmp.add(triplet[0])
+                    node_ids_to_mask.add(triplet[0])
                     continue
-                if triplet[2] == "<mask>" and not triplet[1].startswith("<r_mask_"):
+                if self.node_labels[triplet[2]] == "<mask>" and not triplet[1].startswith("<r_mask_"):
                     triplet[1] = f"<r_mask_{relation_mask_counter}>"
                     relation_mask_counter += 1
-                    concepts_to_mask_tmp.add(triplet[2])
+                    node_ids_to_mask.add(triplet[2])
                     continue
 
                 if triplet[1] == "<mask>":
-                    if triplet[0] not in concepts_to_mask:
-                        concepts_to_mask_tmp.add(triplet[0])
-                    if triplet[2] not in concepts_to_mask:
-                        concepts_to_mask_tmp.add(triplet[2])
+                    if triplet[0] not in node_ids_to_mask:
+                        node_ids_to_mask.add(triplet[0])
+                    if triplet[2] not in node_ids_to_mask:
+                        node_ids_to_mask.add(triplet[2])
                     continue
 
-                if triplet[0] in concepts_to_mask and triplet[1].startswith("<r_mask_"):
-                    if triplet[2] not in concepts_to_mask:
-                        concepts_to_mask_tmp.add(triplet[2])
+                if triplet[0] in node_ids_to_mask and triplet[1].startswith("<r_mask_"):
+                    if triplet[2] not in node_ids_to_mask:
+                        node_ids_to_mask.add(triplet[2])
                     continue
 
-                if triplet[2] in concepts_to_mask and triplet[1].startswith("<r_mask_"):
-                    if triplet[0] not in concepts_to_mask:
-                        concepts_to_mask_tmp.add(triplet[0])
+                if triplet[2] in node_ids_to_mask and triplet[1].startswith("<r_mask_"):
+                    if triplet[0] not in node_ids_to_mask:
+                        node_ids_to_mask.add(triplet[0])
                     continue
 
-                if triplet[0] in concepts_to_mask or triplet[2] in concepts_to_mask:
+                if triplet[0] in node_ids_to_mask or triplet[2] in node_ids_to_mask:
                     triplet[1] = f"<r_mask_{relation_mask_counter}>"
                     relation_mask_counter += 1
                     continue
 
-            concepts_to_mask_tmp = concepts_to_mask_tmp - set(concepts_to_mask)
-            concepts_to_mask.extend(concepts_to_mask_tmp)
-            print(_, concepts_to_mask, concepts_to_mask_tmp)
+            node_ids_to_mask_tmp = node_ids_to_mask_tmp - set(node_ids_to_mask)
+            node_ids_to_mask.extend(node_ids_to_mask_tmp)
+            print(_, node_ids_to_mask, node_ids_to_mask_tmp)
 
-        if "<mask>" in concepts_to_mask:
-            concepts_to_mask.remove("<mask>")  # should remain normal "<mask>"
-        assert len(concepts_to_mask) == len(set(concepts_to_mask))
-        concept_to_num = {concept: i for i, concept in enumerate(concepts_to_mask)}
+
+        node_ids_to_mask = [node_id for node_id in node_ids_to_mask if self.node_labels[node_id] != "<mask>"] # should remain normal "<mask>"
+
+        assert len(node_ids_to_mask) == len(set(node_ids_to_mask))
+
         for triplet in self.g:
-            if triplet[0] in concepts_to_mask:
-                triplet[0] = f"<c_mask_{concept_to_num[triplet[0]]}>"
-            if triplet[2] in concepts_to_mask:
-                triplet[2] = f"<c_mask_{concept_to_num[triplet[2]]}>"
+            if triplet[0] in node_ids_to_mask:
+                self.node_labels[triplet[0]] = f"<c_mask_{triplet[0]}>"
+            if triplet[2] in node_ids_to_mask:
+                self.node_labels[triplet[2]] = f"<c_mask_{triplet[2]}>"
 
     def __str__(self):
-        out_str = "\n".join([str(triplet) for triplet in self.g])
+        out_str = "\n".join([f"({self.node_labels[triplet[0]]}, {triplet[1]}, {self.node_labels[triplet[2]]})" for triplet in self.g])
         return out_str
 
     def __eq__(self, other):
         if self.__class__ != other.__class__:
             return False
-        return self.g == other.g
+        return (self.g == other.g) and (self.node_labels == other.node_labels)
 
 
 class Data(Namespace):
@@ -155,14 +158,23 @@ class Data(Namespace):
 
 def get_dummy_graph(num_triplets: int = 3) -> Graph:
     g = [
-        ("dog", "IsA", "animal"),
-        ("cat", "IsA", "animal"),
-        ("black poodle", "IsA", "dog"),
-        ("black cat", "IsA", "cat"),
+        (0, "IsA", 1),
+        (2, "IsA", 1),
+        (3, "IsA", 0),
+        (4, "IsA", 2),
     ]
+
+    node_labels = {
+        0 : "dog",
+        1 : "animal",
+        2 : "cat",
+        3 : "black poodle",
+        4 : "black cat"
+    }
+
     assert num_triplets <= 4, "num_triplets must be <= 4"
     g = g[:num_triplets]
-    g = Graph(g)
+    g = Graph(g, node_labels)
     return g
 
 
@@ -228,82 +240,42 @@ def r2nl(r: str) -> str:
         return r
 
 
-def _get_str2tok(g: Graph, tokenizer: T5Tokenizer) -> dict[str, list[int]]:
+def _get_str2tok(g: nx.Graph, tokenizer: T5Tokenizer) -> dict[str, list[int]]:
     """
     Get a dictionary that maps strings to tokens.
     """
-    # tokenize concepts and relations
-    c_tok = tokenizer([r2nl(c) for c in g.concepts], padding=False)["input_ids"]
-    r_tok = tokenizer([r2nl(r) for r in g.relations], padding=False)["input_ids"]
+    unique_strings = set()
+    unique_strings.update([x[1]['label'] for x in g.nodes.data()])
+    unique_strings.update([x[2]['label'] for x in g.edges.data()])
 
-    tokens = c_tok + r_tok
-    node_names = (
-        g.concepts + g.relations
-    )  # these are not necessarily all nodes in the Levi Graph, as relations can occur more than once
-    assert len(tokens) == len(node_names), f"{len(tokens) = }, {len(node_names) = }"
-
-    # remove end-of-sequence token
-    tokens = [
-        toks[:-1] if toks[-1] == tokenizer.eos_token_id else toks for toks in tokens
-    ]
-
-    # create a dictionary mapping concepts and relations to their tokenized forms
-    str2tok = {node: tok for node, tok in zip(node_names, tokens)}
+    str2tok = {string: tokenizer.encode(string, add_special_tokens=False) for string in unique_strings}
     str2tok["</s>"] = [tokenizer.eos_token_id]
     return str2tok
 
 
-def _get_graphT5_input_sequence(
-    g: Graph, str2tok: dict, use_eos: bool
-) -> Tuple[list, dict]:
-    # get input sequence (i.e. sequence that will be fed into the model for this graph)
-    all_nodes = (
-        g.relations_multiple + g.concepts
-    )  # list of all concepts and relations that will be in the final sequence (i.e. all nodes of the Levi Graph)  # the order of nodes is first all relations (in the order that they appear in g.g), and then all concepts (in alphabetical order. though here the order is not important)
+def _get_graphT5_input_sequence(g: nx.Graph, str2tok: dict):
 
-    if use_eos:
-        all_nodes.append("</s>")
+    all_tokens = []
 
-    all_tokens = [
-        str2tok[node] for node in all_nodes
-    ]  # list of length #nodes, where each element is a list of token ids
-    indices = {
-        node: [] for node in all_nodes
-    }  # dictionary mapping each node to its start-index and end- in the sequence. Keys are nodes, values are lists of tuples (start_index, end_index). The lists have a length of 1 for concepts and are as long as the number of occurances of the relation in the graph for relations.  # WARNING: this assumes that concepts and realtions have different names. This not always the case for REBEL. For concept_indices this is fixed.
-    num_relation_tokens = sum(
-        [len(token) for token in all_tokens[: len(g.relations_multiple)]]
-    )  # number of tokens that are relations
-    num_concept_tokens = sum(
-        [
-            len(token)
-            for token in all_tokens[
-                len(g.relations_multiple) : len(g.relations_multiple) + len(g.concepts)
-            ]
-        ]
-    )  # number of tokens that are concepts
-    num_eos_tokens = 1 if use_eos else 0
-
-    is_concept = torch.tensor(
-        [False] * num_relation_tokens
-        + [True] * num_concept_tokens
-        + [False] * num_eos_tokens,
-        dtype=torch.bool,
-    )  # tensor of length #nodes, where each element is True if the node is a concept and False if it is a relation
     index_counter = 0
-    assert len(all_nodes) == len(all_tokens), (all_nodes, all_tokens)
+    for node in g.nodes(data=True):
+      tokens = str2tok[node[1]['label']]
+      node[1]['tokens'] = tokens
+      node[1]['indices'] = (index_counter, index_counter + len(tokens))
+      all_tokens.extend(str2tok[node[1]['label']])
+      index_counter += len(tokens)
 
-    for node, token in zip(all_nodes, all_tokens):
-        indices[node].append((index_counter, index_counter + len(token)))
-        # assert is_concept[index_counter:index_counter+len(token)].all() == (node in g.concepts), f"{is_concept = }, {node = }, {g.concepts = }, {index_counter = }, {len(token) = }, {is_concept[index_counter:index_counter+len(token)] = }"
-        index_counter += len(token)
+    for edge in g.edges(data=True):
+      tokens = str2tok[edge[2]['label']]
+      edge[2]['tokens'] = tokens
+      edge[2]['indices'] = (index_counter, index_counter + len(tokens))
+      all_tokens.extend(str2tok[edge[2]['label']])
+      index_counter += len(tokens)
 
-    concept_indices = {
-        node: [indices[node][-1]] for node in g.concepts
-    }  # [-1] and reput in list in case relations have the same name as a concept (concepts are put in last).
-    sequence = torch.tensor(list(chain.from_iterable(all_tokens)), dtype=torch.long)
+    sequence = torch.tensor((all_tokens), dtype=torch.long)
     sequence = sequence.unsqueeze(0)  # add batch dimension
-    is_concept = is_concept.unsqueeze(0)  # add batch dimension
-    return sequence, indices, is_concept, concept_indices
+
+    return sequence, g
 
 
 def _get_graphT5_relativeposition_sparsitymask(
@@ -332,16 +304,10 @@ def _get_graphT5_relativeposition_sparsitymask(
     relation_counter = {
         relation: 0 for relation in g.relations
     }  # dictionary mapping each relation to the number of times it has already appeared in the graph
-    for triplet in g.g:
-        pos_h = indices[triplet[0]][
-            0
-        ]  # position of head; tuple (start_index, end_index)
-        pos_r = indices[triplet[1]][
-            relation_counter[triplet[1]]
-        ]  # position of relation; tuple (start_index, end_index)
-        pos_t = indices[triplet[2]][
-            0
-        ]  # position of tail; tuple (start_index, end_index)
+    for i, triplet in enumerate(g.g):
+        pos_h = indices['node_nodes'][triplet[0]] # position of head; tuple (start_index, end_index)
+        pos_r = indices['edge_nodes'][i]# position of relation; tuple (start_index, end_index)
+        pos_t = indices['node_nodes'][triplet[2]]# position of tail; tuple (start_index, end_index)
 
         l_h, l_r = (
             pos_h[1] - pos_h[0],
@@ -408,7 +374,7 @@ def _get_graphT5_relativeposition_sparsitymask(
 
 
 def _get_global_graphT5_relativeposition_sparsitymask(
-    g: Graph, indices: dict, sequence_length: int, use_eos: bool, eos: str
+    g: nx.Graph, sequence_length: int, use_eos: bool, eos: str
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     ### get relative position of each node in the sequence, as well as the sparsity mask ###
     # initialize relative position matrix)
@@ -425,25 +391,16 @@ def _get_global_graphT5_relativeposition_sparsitymask(
         size=(sequence_length, sequence_length), dtype=torch.bool
     )
 
+    indices = [x for x in chain.from_iterable([[edge[2]['indices'] for edge in g.edges(data=True)], [node[1]['indices'] for node in g.nodes(data=True)]])]
     # relative positions / sparsity within each node
-    for start, end in chain.from_iterable(indices.values()):
+    for start, end in indices:
         relative_position[start:end, start:end] = _get_relative_position(end - start)
         use_additional_bucket[start:end, start:end] = False
 
-    # relative position between nodes of the same triplet
-    relation_counter = {
-        relation: 0 for relation in g.relations
-    }  # dictionary mapping each relation to the number of times it has already appeared in the graph
-    for triplet in g.g:
-        pos_h = indices[triplet[0]][
-            0
-        ]  # position of head; tuple (start_index, end_index)
-        pos_r = indices[triplet[1]][
-            relation_counter[triplet[1]]
-        ]  # position of relation; tuple (start_index, end_index)
-        pos_t = indices[triplet[2]][
-            0
-        ]  # position of tail; tuple (start_index, end_index)
+    for edge in g.edges(data=True):
+        pos_h = g.nodes[edge[0]]['indices'] # position of head; tuple (start_index, end_index)
+        pos_r = edge[2]['indices'] # position of relation; tuple (start_index, end_index)
+        pos_t = g.nodes[edge[1]]['indices']  # position of tail; tuple (start_index, end_index)
 
         l_h, l_r = (
             pos_h[1] - pos_h[0],
@@ -479,9 +436,6 @@ def _get_global_graphT5_relativeposition_sparsitymask(
                 use_additional_bucket[pr, pt] = False
                 use_additional_bucket[pt, pr] = False
 
-        relation_counter[
-            triplet[1]
-        ] += 1  # next time when that relation comes, then the next tokens will be used
         if use_eos:
             assert (
                 len(indices["</s>"]) == 1
@@ -518,7 +472,7 @@ def _get_global_graphT5_relativeposition_sparsitymask(
     return relative_position, sparsity_mask, use_additional_bucket
 
 
-def graph_to_graphT5(g: Graph, tokenizer: T5Tokenizer, how: str, eos: str) -> Data:
+def graph_to_graphT5(g: nx.Graph, tokenizer: T5Tokenizer, how: str, eos: str) -> Data:
     """
     Convert a graph to a graphT5 input.
     :param g: graph
@@ -538,8 +492,8 @@ def graph_to_graphT5(g: Graph, tokenizer: T5Tokenizer, how: str, eos: str) -> Da
         g, tokenizer
     )  # get a dictionary mapping concepts and relations to their tokenized forms
 
-    sequence, indices, is_concept, concept_indices = _get_graphT5_input_sequence(
-        g, str2tok, use_eos
+    sequence, g_with_indices = _get_graphT5_input_sequence(
+        g, str2tok#, use_eos
     )  # get input sequence (i.e. sequence that will be fed into the model for this graph
     sequence_length = sequence.shape[1]
 
@@ -553,7 +507,7 @@ def graph_to_graphT5(g: Graph, tokenizer: T5Tokenizer, how: str, eos: str) -> Da
     elif how == "global":
         relative_position, sparsity_mask, use_additional_bucket = (
             _get_global_graphT5_relativeposition_sparsitymask(
-                g, indices, sequence_length, use_eos, eos
+                g_with_indices, sequence_length, use_eos, eos
             )
         )
         num_additional_buckets = (
@@ -569,10 +523,7 @@ def graph_to_graphT5(g: Graph, tokenizer: T5Tokenizer, how: str, eos: str) -> Da
         relative_position=relative_position,
         sparsity_mask=sparsity_mask,
         use_additional_bucket=use_additional_bucket,
-        indices=indices,
-        is_concept=is_concept,
-        concept_indices=concept_indices,
-        num_additional_buckets=num_additional_buckets,
+        num_additional_buckets=num_additional_buckets
     )
 
     return data
