@@ -3,6 +3,7 @@ from argparse import Namespace
 from functools import cache
 from itertools import chain
 from typing import Dict, List, Tuple
+import networkx as nx
 
 import torch
 from transformers import T5Tokenizer
