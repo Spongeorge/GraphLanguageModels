@@ -1,4 +1,6 @@
-## Fork by timkolber to implement custom changes to inspect GLMs using Patchscopes.
+## Fork of [timkolber/GraphLanguageModels](https://github.com/timkolber/GraphLanguageModels) and  [Heidelberg-NLP/GraphLanguageModels](https://github.com/Heidelberg-NLP/GraphLanguageModels).
+
+This version supports arbitrarily labelled nodes as NetworkX graphs; other repos don't support graphs where multiple nodes may have the same label. 
 
 # Graph Language Models
 This repository contains the code for the paper "[Graph Language Models](https://arxiv.org/abs/2401.07105)". 
