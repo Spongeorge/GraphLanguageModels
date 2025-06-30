@@ -2,6 +2,56 @@
 
 This version supports arbitrarily labelled nodes as NetworkX graphs; other repos don't support graphs where multiple nodes may have the same label. 
 
+
+### Example: Molecular Graph Inputs with RDKit
+
+```
+from rdkit import Chem
+import networkx as nx
+import matplotlib.pyplot as plt
+
+smiles = 'CCO'
+
+mol = Chem.MolFromSmiles(smiles)
+
+g = nx.Graph()
+
+for atom in mol.GetAtoms():
+    atom_idx = atom.GetIdx()
+    atom_symbol = atom.GetSymbol()
+    g.add_node(atom_idx, label=atom_symbol)
+
+for bond in mol.GetBonds():
+    i = bond.GetBeginAtomIdx()
+    j = bond.GetEndAtomIdx()
+    g.add_edge(i, j, label=bond_type)
+
+pos = nx.spring_layout(G)  
+
+node_labels = nx.get_node_attributes(G, 'label')
+nx.draw_networkx_nodes(G, pos, node_color='lightblue')
+nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=12)
+
+
+edge_labels = nx.get_edge_attributes(G, 'label')
+nx.draw_networkx_edges(G, pos)
+nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=12)
+
+plt.axis('off')
+plt.show()
+```
+
+![image](https://github.com/user-attachments/assets/681b4b0a-0f3a-4013-9849-880526ab2a2a)
+
+```
+# to get the inputs for a graph language model from the nx graph
+tmp_data = graph_to_graphT5(g, tokenizer, how='global', eos='False')
+
+# optionally add a string outside of the graph
+add_text_to_graph_data(data=tmp_data, text="Please describe the molecule.", tokenizer=model.tokenizer, use_text=param["use_text"])
+```
+
+
 # Graph Language Models
 This repository contains the code for the paper "[Graph Language Models](https://arxiv.org/abs/2401.07105)". 
 Please feel free to send us an email (<a href="mailto:plenz@cl.uni-heidelberg.de">plenz@cl.uni-heidelberg.de</a>) if you have any questions, comments or feedback. 
