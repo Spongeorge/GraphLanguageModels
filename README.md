@@ -51,6 +51,7 @@ tmp_data = graph_to_graphT5(g, tokenizer, how='global', eos='False')
 add_text_to_graph_data(data=tmp_data, text="Please describe the molecule.", tokenizer=model.tokenizer, use_text=param["use_text"])
 ```
 
+---
 
 # Graph Language Models
 This repository contains the code for the paper "[Graph Language Models](https://arxiv.org/abs/2401.07105)". 
