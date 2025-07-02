@@ -4,10 +4,10 @@ from typing import List, Tuple, Dict, Union, Optional
 import logging
 
 from transformers.modeling_utils import PreTrainedModel
-from ..graph_t5 import T5ForConditionalGeneration
-from ..graph_t5 import T5Config, T5EncoderModel
-from ..graph_t5 import T5TokenizerFast as T5Tokenizer
-from ..wrapper_functions import graph_to_graphT5, get_dummy_graph
+from .graph_t5 import T5ForConditionalGeneration
+from .graph_t5 import T5Config, T5EncoderModel
+from .graph_t5 import T5TokenizerFast as T5Tokenizer
+from .wrapper_functions import graph_to_graphT5, get_dummy_graph
 
 class GraphT5ForConditionalGeneration(PreTrainedModel):
     config_class = T5Config
