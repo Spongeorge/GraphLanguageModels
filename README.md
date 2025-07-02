@@ -12,6 +12,14 @@ import matplotlib.pyplot as plt
 
 smiles = 'CCO'
 
+bond_type_to_smiles = {
+    'SINGLE' : '',
+    'DOUBLE' : '=',
+    'TRIPLE' : '#',
+    'AROMATIC' : '',
+    'DATIVE' : '->',
+}
+
 mol = Chem.MolFromSmiles(smiles)
 
 g = nx.Graph()
@@ -24,6 +32,7 @@ for atom in mol.GetAtoms():
 for bond in mol.GetBonds():
     i = bond.GetBeginAtomIdx()
     j = bond.GetEndAtomIdx()
+    bond_type = bond_type_to_smiles[str(bond.GetBondType())]
     g.add_edge(i, j, label=bond_type)
 
 pos = nx.spring_layout(G)  
