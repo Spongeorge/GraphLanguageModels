@@ -95,3 +95,57 @@ class GraphT5ForConditionalGeneration(PreTrainedModel):
             eos_token_id=eos_token_id,
             **model_kwargs,
         )
+
+class GraphT5ForSequenceClassification(PreTrainedModel):
+    config_class = T5Config
+
+    def __init__(self, config: T5Config):
+        super().__init__(config=config)
+        self.config = config
+        self.tokenizer = T5Tokenizer.from_pretrained(
+            self.config.modelsize, model_max_length=self.config.model_max_length
+        )
+        self.t5model = T5EncoderModel.from_pretrained(
+            self.config.modelsize, config=config, ignore_mismatched_sizes=True
+        )
+        self.hidden_size = self.t5model.config.d_model
+        self.classification_head = nn.Linear(self.hidden_size, self.config.num_classes, bias=True)
+        self.softmax = nn.Softmax(dim=-1)
+
+    @staticmethod
+    def get_config(num_classes: int, modelsize: str = "t5-base", num_additional_buckets: int = 0, model_max_length: int = 512) -> T5Config:
+        config = T5Config.from_pretrained(modelsize)
+        config.num_classes = int(num_classes)
+        config.modelsize = str(modelsize)
+        config.relative_attention_num_additional_buckets = int(num_additional_buckets)
+        config.model_max_length = int(model_max_length)
+        return config
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        relative_position: torch.Tensor,
+        sparsity_mask: torch.Tensor,
+        use_additional_bucket: torch.Tensor,
+    ) -> torch.Tensor:
+        logging.debug('t5 encoder model')
+        output = self.t5model(
+            input_ids=input_ids,
+            relative_position=relative_position,
+            sparsity_mask=sparsity_mask,
+            use_additional_bucket=use_additional_bucket,
+        )  # output[0]: (batch_size, seq_len, hidden_size)
+
+        # Sequence classification: use mean pooling
+        sequence_output = output[0]  # (batch_size, seq_len, hidden_size)
+        pooled_output = sequence_output.mean(dim=1)  # (batch_size, hidden_size)
+
+        logging.debug('classification head')
+        logits = self.classification_head(pooled_output)  # (batch_size, num_classes)
+        return logits
+
+    def get_probabilities(self, logits: torch.Tensor) -> torch.Tensor:
+        return self.softmax(logits)  # (batch_size, num_classes)
+
+    def get_label(self, logits: torch.Tensor) -> torch.Tensor:
+        return torch.argmax(logits, dim=-1) 
