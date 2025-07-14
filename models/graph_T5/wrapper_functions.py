@@ -4,6 +4,7 @@ from functools import cache
 from itertools import chain
 from typing import Dict, List, Tuple
 import networkx as nx
+import numpy as np
 
 import torch
 from transformers import T5Tokenizer
@@ -486,47 +487,117 @@ def _get_shortest_path_graphT5_relativeposition_sparsitymask(
         size=(sequence_length, sequence_length), dtype=torch.bool
     )  # could switch to None, but then code has to be updated accordingly (in particular get_batch)
     # initialize use_additional_bucket
-    use_additional_bucket = torch.zeros( # Assuming that there are no additional buckets for now.
+    use_additional_bucket = torch.ones(
         size=(sequence_length, sequence_length), dtype=torch.bool
     )
 
-    paths = dict(nx.all_pairs_shortest_path(g))
+    indices = [x for x in chain.from_iterable([[edge[2]['indices'] for edge in g.edges(data=True)], [node[1]['indices'] for node in g.nodes(data=True)]])]
+    # relative positions / sparsity within each node
+    for start, end in indices:
+        relative_position[start:end, start:end] = _get_relative_position(end - start)
+        use_additional_bucket[start:end, start:end] = False
 
-    nodes_token_lengths = {}
-    for node_id, data in g.nodes(data=True):
-        start, end = data['indices']
-        nodes_token_lengths[node_id] = end - start
+    for edge in g.edges(data=True):
+        pos_h = g.nodes[edge[0]]['indices'] # position of head; tuple (start_index, end_index)
+        pos_r = edge[2]['indices'] # position of relation; tuple (start_index, end_index)
+        pos_t = g.nodes[edge[1]]['indices']  # position of tail; tuple (start_index, end_index)
 
-    edges_token_lengths = {}
-    for u, v, data in g.edges(data=True):
-        if 'indices' in data:
-            start, end = data['indices']
-            edges_token_lengths[(u, v)] = end - start
+        l_h, l_r = (
+            pos_h[1] - pos_h[0],
+            pos_r[1] - pos_r[0],
+        )  # length (i.e. number of tokens) of head and relation
 
-    token_nodes = np.full(sequence_length, fill_value=None, dtype=object)
-    for node_id, data in g.nodes(data=True):
-        start, end = data['indices']
-        token_nodes[start:end] = node_id
+        # iterate over all combinations of tokens in each triplet. This implementation is not very elegant, but it works.
+        for ih, ph in enumerate(
+            range(pos_h[0], pos_h[1])
+        ):  # iterate over all head tokens
+            for ir, pr in enumerate(
+                range(pos_r[0], pos_r[1])
+            ):  # iterate over all relation tokens
+                relative_position[ph, pr] = l_h - ih + ir
+                relative_position[pr, ph] = -(l_h - ih + ir)
+                use_additional_bucket[ph, pr] = False
+                use_additional_bucket[pr, ph] = False
+            for it, pt in enumerate(
+                range(pos_t[0], pos_t[1])
+            ):  # iterate over all tail tokens
+                relative_position[ph, pt] = l_h - ih + l_r + it
+                relative_position[pt, ph] = -(l_h - ih + l_r + it)
+                use_additional_bucket[ph, pt] = False
+                use_additional_bucket[pt, ph] = False
+        for ir, pr in enumerate(
+            range(pos_r[0], pos_r[1])
+        ):  # iterate over all relation tokens
+            for it, pt in enumerate(
+                range(pos_t[0], pos_t[1])
+            ):  # iterate over all tail tokens
+                relative_position[pr, pt] = l_r - ir + it
+                relative_position[pt, pr] = -(l_r - ir + it)
+                use_additional_bucket[pr, pt] = False
+                use_additional_bucket[pt, pr] = False
 
-    for i in range(sequence_length):
-        for j in range(sequence_length):
-            n_i, n_j = token_nodes[i], token_nodes[j]
-            if n_i is None or n_j is None:
-                relative_position[i, j] = 1e6
-                continue
-            if n_j in paths[n_i]:
-                path = paths[n_i][n_j]
-                token_count = sum(nodes_token_lengths[n] for n in path)
-                for k in range(len(path)-1):
-                    e = (path[k], path[k+1])
-                    e_len = edges_token_lengths.get(e, 0)
-                    token_count += e_len
-                relative_position[i, j] = token_count
-                sparsity_mask[i, j] = False
+        if use_eos:
+            assert (
+                len(indices["</s>"]) == 1
+            ), f"{indices['</s>'] = } should have length 1"
+            pos_eos = indices["</s>"][
+                0
+            ]  # position of head; tuple (start_index, end_index)
+            assert pos_eos[0] + 1 == pos_eos[1], pos_eos
+            pos_eos = pos_eos[0]  # position of eos token
+
+            if eos == "bidirectional":
+                relative_position[:, pos_eos] = +1e6
+                relative_position[pos_eos, :] = -1e6
+                relative_position[pos_eos, pos_eos] = 0
+                sparsity_mask[:, pos_eos] = True
+                sparsity_mask[pos_eos, :] = True
+                use_additional_bucket[:, pos_eos] = False
+                use_additional_bucket[pos_eos, :] = False
+            elif eos == "unidirectional":
+                relative_position[:, pos_eos] = 1e6
+                relative_position[pos_eos, pos_eos] = 0
+                sparsity_mask[pos_eos, :] = (
+                    False  # no messages from eos to other tokens
+                )
+                sparsity_mask[:, pos_eos] = True
+                use_additional_bucket[:, pos_eos] = False
+                use_additional_bucket[pos_eos, :] = False
             else:
-                relative_position[i, j] = 1e6
+                raise ValueError(f"{eos = } is not a valid option.")
 
-    #TODO: Add EOS computation
+    paths = dict(nx.all_pairs_shortest_path(g))
+    # For all non-adjacent nodes
+    traversed_paths = set()
+
+    for src_node, paths_to_tgt_nodes in paths.items():
+        for tgt_node, path in paths_to_tgt_nodes.items():
+            if len(path) <= 2 or tuple(sorted((src_node, tgt_node))) in traversed_paths:
+                continue
+            # iterate over all edges in path
+
+            pos_h = g.nodes[src_node]['indices'] # position of head; tuple (start_index, end_index)
+            pos_t = g.nodes[tgt_node]['indices']  # position of tail; tuple (start_index, end_index)
+
+            l_h = pos_h[1] - pos_h[0]
+            l_path = 0  # length (i.e. number of tokens) of path between head and tail nodes
+            for node_i in range(len(path) - 1):
+                if path[node_i] not in [src_node, tgt_node]:
+                    l_path += g.nodes[path[node_i]]['indices'][1] - g.nodes[path[node_i]]['indices'][0] # add number of node tokens to length
+                l_path += g.get_edge_data(path[node_i], path[node_i+1])['indices'][1] - g.get_edge_data(path[node_i], path[node_i+1])['indices'][0]
+
+            for ih, ph in enumerate(
+            range(pos_h[0], pos_h[1])
+            ):  # iterate over all head tokens
+                for it, pt in enumerate(
+                    range(pos_t[0], pos_t[1])
+                ):  # iterate over all tail tokens
+                    relative_position[ph, pt] = l_h - ih + l_path + it
+                    relative_position[pt, ph] = -(l_h - ih + l_path + it)
+                    use_additional_bucket[ph, pt] = False
+                    use_additional_bucket[pt, ph] = False
+            #TODO : compute relative distance to edge tokens
+            traversed_paths.add(tuple(sorted((src_node, tgt_node))))
 
     relative_position = relative_position.unsqueeze(0)  # add batch dimension
     sparsity_mask = sparsity_mask.unsqueeze(0)  # add batch dimension
@@ -579,7 +650,7 @@ def graph_to_graphT5(g: nx.Graph, tokenizer: T5Tokenizer, how: str, eos: str) ->
     elif how == "shortest_path":
         relative_position, sparsity_mask, use_additional_bucket = (
             _get_shortest_path_graphT5_relativeposition_sparsitymask(
-                g_with_indices, sequence_length, use_eos, eos
+                get_levi_graph(g_with_indices), sequence_length, use_eos, eos
             )
         )
         num_additional_buckets = 0  # shortest path does not use additional buckets
@@ -727,6 +798,29 @@ def get_embedding(
         raise NotImplementedError(
             f"{embedding_aggregation = } is not supported. Use either 'mean' or 'seq'."
         )
+
+def get_levi_graph(g):
+    levi = nx.Graph()
+
+    for node, data in g.nodes(data=True):
+        levi.add_node(node, **data)
+
+    if len(g.nodes) > 0:
+        new_node_id = max(g.nodes) + 1
+    else:
+        new_node_id = 0
+
+    for u, v, edge_data in g.edges(data=True):
+        edge_node_id = new_node_id
+        new_node_id += 1
+
+        edge_label = edge_data.get('label', None)
+        levi.add_node(edge_node_id, label=edge_label)
+
+        levi.add_edge(edge_node_id, u, label='')
+        levi.add_edge(edge_node_id, v, label='')
+
+    return levi
 
 
 def add_text_to_graph_data(data, text, tokenizer, use_text):
